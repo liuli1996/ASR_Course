@@ -33,13 +33,13 @@ class GMM:
     
     def gaussian(self , x , mu , sigma):
         """Calculate gaussion probability.
-    
+
             :param x: The observed data, dim*1.
             :param mu: The mean vector of gaussian, dim*1
             :param sigma: The covariance matrix, dim*dim
             :return: the gaussion probability, scalor
         """
-        D=x.shape[0]
+        D = x.shape[0]
         det_sigma = np.linalg.det(sigma)
         inv_sigma = np.linalg.inv(sigma + 0.0001)
         mahalanobis = np.dot(np.transpose(x-mu), inv_sigma)
@@ -53,11 +53,10 @@ class GMM:
             param: X: A matrix including data samples, num_samples * D
             return: log likelihood of current model 
         """
-
         log_llh = 0.0
-        """
-            FINISH by YOUSELF
-        """
+        for n in range(X.shape[0]):
+            single_llh = [self.pi[j] * self.gaussian(X[n, :], self.mu[j], self.sigma[j]) for j in range(self.K)]
+            log_llh = log_llh + np.log(sum(single_llh))
         return log_llh
 
     def em_estimator(self , X):
@@ -67,10 +66,24 @@ class GMM:
             return: log likelihood of updated model 
         """
 
-        log_llh = 0.0
-        """
-            FINISH by YOUSELF
-        """
+        num, dim = X.shape
+        r = np.zeros((num, self.K))
+        for n in range(num):
+            tmp = np.zeros((self.K))
+            for j in range(self.K):
+                tmp[j] = self.pi[j] * self.gaussian(X[n, :], self.mu[j], self.sigma[j])
+            r[n, :] = tmp / np.sum(tmp, axis=0)
+
+        N = np.sum(r, axis=0)
+
+        self.mu = [np.dot(r.T, X)[j] / N[j] for j in range(self.K)]
+        for j in range(self.K):
+            conv = [r[n, j] * np.dot((X[n, :]-self.mu[j]).reshape(self.dim, 1),
+                                     (X[n, :]-self.mu[j]).reshape(1, self.dim)).reshape((self.dim, self.dim, 1))
+                                                                                        for n in range(num)]
+            self.sigma[j] = np.sum(np.concatenate(conv, axis=2), axis=2) / N[j]
+        self.pi = N / num
+
         log_llh = self.calc_log_likelihood(X)
 
         return log_llh
@@ -82,6 +95,7 @@ def train(gmms, num_iterations = num_iterations):
     for target in targets:
         feats = get_feats(target, dict_utt2feat, dict_target2utt)   #
         for i in range(num_iterations):
+            print("{}# iterations...".format(i))
             log_llh = gmms[target].em_estimator(feats)
     return gmms
 
