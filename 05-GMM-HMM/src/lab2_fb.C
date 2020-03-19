@@ -20,11 +20,44 @@
 double forward_backward(const Graph& graph, const matrix<double>& gmmProbs,
                         matrix<FbCell>& chart, vector<GmmCount>& gmmCountList,
                         map<int, double>& transCounts) {
-  int frmCnt = chart.size1() - 1;
-  int stateCnt = chart.size2();
+    int frmCnt = chart.size1() - 1;  // 68
+    int stateCnt = chart.size2();    // 20
 
-  //  BEGIN_LAB
-  //
+    //// initial chart
+    int start_state_id =  graph.get_start_state();       //  Get start state
+    chart(0, start_state_id).set_forw_log_prob(0);   // 注意初始状态
+    int arcCnt = graph.get_arc_count(start_state_id);    //  Get number of outgoing arcs.
+    int arcId = graph.get_first_arc_id(start_state_id);  //  Get arc ID of first outgoing arc.
+
+    for (int arcIdx = 0; arcIdx < arcCnt; ++arcIdx) {
+        Arc arc;
+        arcId = graph.get_arc(arcId, arc);           // next ard of the same state
+        int dstState = arc.get_dst_state();              // destiny state.
+        double transition_prob = arc.get_log_prob();     //  转移概率
+        double alpha_log_pro = transition_prob + gmmProbs(0, arc.get_gmm());
+        chart(1, dstState).set_forw_log_prob(alpha_log_pro);
+    }
+
+    //// recursive forward part
+    for (int frmIdx = 2; frmIdx <= frmCnt; ++frmIdx) {
+        for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
+            int arcCnt = graph.get_arc_count(stateIdx);          // Get number of outgoing arcs.
+            int arcId = graph.get_first_arc_id(stateIdx);        // Get arc ID of first outgoing arc.
+            for (int arcIdx = 0; arcIdx < arcCnt; ++arcIdx) {
+                Arc arc;
+                arcId = graph.get_arc(arcId, arc);           // next ard of the same state
+                int dstState = arc.get_dst_state();              // destiny state.
+                double logProb = arc.get_log_prob() +
+                                 chart(frmIdx - 1, stateIdx).get_forw_log_prob() +
+                                 gmmProbs(frmIdx - 1, arc.get_gmm());
+                logProb = add_log_probs(vector<double>{
+                          logProb, chart(frmIdx, dstState).get_forw_log_prob()});
+                chart(frmIdx, dstState).set_forw_log_prob(logProb);
+            }
+        }
+    }
+
+
   //  Input:
   //      An HMM stored in the object "graph" of type "Graph".
   //      A matrix of doubles "gmmProbs"
@@ -65,33 +98,26 @@ double forward_backward(const Graph& graph, const matrix<double>& gmmProbs,
   //
   //      chart(frmIdx, stateIdx).set_forw_log_prob(logProb);
   //      chart(frmIdx, stateIdx).set_back_log_prob(logProb);
-  //
-  //  Fill in forward pass here.
 
-  // Init chart
-  // Recursive forward pass 
 
   // DEBUG forward
-  // cout << "forward" << endl;
-  // for (int frmIdx = 0; frmIdx <= frmCnt; ++frmIdx) {
-  //   for (int srcIdx = 0; srcIdx < stateCnt; ++srcIdx) {
-  //     cout << format(" %d") % chart(frmIdx, srcIdx).get_forw_log_prob();
-  //   }
-  //   cout << endl;
-  // }
-  //  END_LAB
-  //
+//    cout << "forward" << endl;
+//    for (int frmIdx = 0; frmIdx <= frmCnt; ++frmIdx) {
+//        for (int srcIdx = 0; srcIdx < stateCnt; ++srcIdx) {
+//            cout << format(" %d") % chart(frmIdx, srcIdx).get_forw_log_prob();
+//        }
+//        cout << endl;
+//    }
 
   //  This function computes the total forward prob of the entire utterence,
   //  i.e., the sum of the probabilities of all complete paths through
   //  the HMM, and places it in "uttLogProb".
   //  In addition, the backward log prob of all cells for the last
   //  frame are initialized to the correct value.
-  double uttLogProb = init_backward_pass(graph, chart);
-  if (uttLogProb == g_zeroLogProb) return uttLogProb;
+    double uttLogProb = init_backward_pass(graph, chart);
+    if (uttLogProb == g_zeroLogProb) return uttLogProb;
 
-  //  BEGIN_LAB
-  //
+
   //  Output:
   //      On exit, chart(frmIdx, stateIdx).get_back_log_prob()
   //      should be set to the appropriate backward probability.
@@ -113,48 +139,55 @@ double forward_backward(const Graph& graph, const matrix<double>& gmmProbs,
   //      These counts will later be used to update GMM statistics.
   //
   //  Fill in backward pass here.
-  for (int frmIdx = frmCnt-1; frmIdx >= 0; frmIdx--) {
-    vector<vector<double> > backwardProbs(stateCnt);
-    for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
-      int arcCnt = graph.get_arc_count(stateIdx);
-      int arcId = graph.get_first_arc_id(stateIdx);
-      for (int arcIdx = 0; arcIdx < arcCnt; ++arcIdx) {
-        Arc arc;
-        arcId = graph.get_arc(arcId, arc);
-        int dstState = arc.get_dst_state();
-        int gmmIdx = arc.get_gmm();
-        assert(gmmIdx >= 0);
-        double gmmProb = gmmProbs(frmIdx, gmmIdx);
-        double arcProb = arc.get_log_prob();
-        double logProb = chart(frmIdx+1, dstState).get_back_log_prob();
-        // Next state is activated backward
-        if (logProb > g_zeroLogProb) {
-          double totalProb = logProb + gmmProb + arcProb;
-          backwardProbs[stateIdx].push_back(totalProb);
+    //// recursive backward part
+    for (int frmIdx = frmCnt - 1; frmIdx > 0; --frmIdx) {
+        for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
+            int arcCnt = graph.get_arc_count(stateIdx);          // Get number of outgoing arcs.
+            int arcId = graph.get_first_arc_id(stateIdx);        // Get arc ID of first outgoing arc.
+            for (int arcIdx = 0; arcIdx < arcCnt; ++arcIdx) {
+                Arc arc;
+                arcId = graph.get_arc(arcId, arc);           // next ard of the same state
+                int dstState = arc.get_dst_state();              // destiny state.
+                double logProb =
+                        arc.get_log_prob() +
+                        gmmProbs(frmIdx, arc.get_gmm()) +
+                        chart(frmIdx + 1, dstState).get_back_log_prob();
+                logProb = add_log_probs(vector<double>{logProb, chart(frmIdx, stateIdx).get_back_log_prob()});
+                chart(frmIdx, stateIdx).set_back_log_prob(logProb);
+            }
         }
-      }
     }
-    for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
-      if (backwardProbs[stateIdx].size() > 0) {
-        chart(frmIdx, stateIdx).set_back_log_prob(add_log_probs(backwardProbs[stateIdx])); 
-      }
-    }
-  }
-  // Recursive backward pass (Don't need terminate step)
 
   // DEBUG backward
-  // cout << "backward\na\nb\nc" << endl;
-  // for (int frmIdx = 0; frmIdx <= frmCnt; ++frmIdx) {
-  //   for (int srcIdx = 0; srcIdx < stateCnt; ++srcIdx) {
-  //     cout << format(" %d") % chart(frmIdx, srcIdx).get_back_log_prob();
-  //   }
-  //   cout << endl;
-  // }
-  
-  // Record posterior prob
-  //  END_LAB
+//    cout << "backward" << endl;
+//    for (int frmIdx = 0; frmIdx <= frmCnt; ++frmIdx) {
+//        for (int srcIdx = 0; srcIdx < stateCnt; ++srcIdx) {
+//            cout << format(" %d") % chart(frmIdx, srcIdx).get_back_log_prob();
+//        }
+//        cout << endl;
+//    }
 
-  return uttLogProb;
+    // Record posterior prob
+//    cout << "chart size" << chart.size2();
+    for (int frmIdx = 1; frmIdx <= frmCnt; ++frmIdx) {
+        for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
+            int arcCnt = graph.get_arc_count(stateIdx);          // Get number of outgoing arcs.
+            int arcId = graph.get_first_arc_id(stateIdx);        // Get arc ID of first outgoing arc.
+            for (int arcIdx = 0; arcIdx < arcCnt; ++arcIdx) {
+                Arc arc;
+                arcId = graph.get_arc(arcId, arc);           // next ard of the same state
+                int dstState = arc.get_dst_state();              // destiny state.
+                double arcPosterior =git个it                       chart(frmIdx - 1, stateIdx).get_forw_log_prob() +  // alpha_t-1_i
+                        arc.get_log_prob() +                                  // a_i_j
+                        gmmProbs(frmIdx - 1, arc.get_gmm()) +              // b_j_(ot)
+                        chart(frmIdx, dstState).get_back_log_prob() -
+                        uttLogProb;
+                gmmCountList.push_back(GmmCount(arc.get_gmm(), frmIdx - 1, exp(arcPosterior)));  //GmmCount是一种数据结构
+            }
+        }
+    }
+
+    return uttLogProb;
 }
 
 /** * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * **

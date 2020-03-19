@@ -7,9 +7,9 @@
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-GmmStats::GmmStats(GmmSet& gmmSet, const map<string, string>& params)
-    : m_params(params),
-      m_gmmSet(gmmSet),
+GmmStats::GmmStats(GmmSet& gmmSet, const map<string, string>& params)  // 构造函数，对m_params,m_gnnSet等值进行初始化
+    : m_params(params),                                                // 函数的主体在{}内
+      m_gmmSet(gmmSet),                                                // GmmSet是数据结构，初始化需要调用这个类的成员函数
       m_gaussCounts(m_gmmSet.get_gaussian_count()),
       m_gaussStats1(m_gmmSet.get_gaussian_count(), m_gmmSet.get_dim_count()),
       m_gaussStats2(m_gmmSet.get_gaussian_count(), m_gmmSet.get_dim_count()) {
@@ -24,12 +24,18 @@ void GmmStats::clear() {
 
 double GmmStats::add_gmm_count(unsigned gmmIdx, double posterior,
                                const vector<double>& feats) {
-  if (m_gmmSet.get_component_count(gmmIdx) != 1)
+    if (m_gmmSet.get_component_count(gmmIdx) != 1)
     throw runtime_error("GMM doesn't have single component.");
-  int gaussIdx = m_gmmSet.get_gaussian_index(gmmIdx, 0);
-  int dimCnt = m_gmmSet.get_dim_count();
+    int gaussIdx = m_gmmSet.get_gaussian_index(gmmIdx, 0);
+    int dimCnt = m_gmmSet.get_dim_count();
 
-  //  BEGIN_LAB
+    m_gaussCounts[gaussIdx] += posterior;
+    for (int dimIdx = 0; dimIdx < dimCnt; ++dimIdx) {
+        m_gaussStats1(gaussIdx, dimIdx) += posterior * feats[dimIdx];
+        m_gaussStats2(gaussIdx, dimIdx) += posterior * pow(feats[dimIdx], 2);
+    }
+
+    //  BEGIN_LAB
   //
   //  Input:
   //      "dimCnt" holds the dimension of the Gaussian and the
@@ -56,7 +62,7 @@ double GmmStats::add_gmm_count(unsigned gmmIdx, double posterior,
   //      dimension of each Gaussian; and "m_gaussStats2" is intended for
   //      storing some sort of second-order statistic for each
   //      dimension of each Gaussian.  The statistics you take
-  //      need to be sufficient for doing the reestimation step below.
+  //      need to be sufficient for doing the re-estimation step below.
   //
   //      These counts have all been initialized to zero
   //      somewhere else at the appropriate time.
@@ -64,6 +70,7 @@ double GmmStats::add_gmm_count(unsigned gmmIdx, double posterior,
   // suppose each GMM only has one component
   //  END_LAB
   //
+
 
   return 0.0;
 }
@@ -92,33 +99,43 @@ double GmmStats::update(const vector<GmmCount>& gmmCountList,
 }
 
 void GmmStats::reestimate() const {
-  //  Reestimate Gaussian means and variances.
-  int gaussCnt = m_gmmSet.get_gaussian_count();
-  int dimCnt = m_gmmSet.get_dim_count();
+    //  Reestimate Gaussian means and variances.
+    int gaussCnt = m_gmmSet.get_gaussian_count();
+    int dimCnt = m_gmmSet.get_dim_count();
 
-  //  BEGIN_LAB
-  //
-  //  Input:
-  //      "gaussCnt" holds the total number of Gaussians.
-  //      "dimCnt" holds the dimension of the Gaussians.
-  //
-  //      The counts you have collected above are stored in:
-  //
-  //      m_gaussCounts[0 .. (#gaussians-1)]
-  //      m_gaussStats1(0 .. (#gaussians-1), 0 .. (dimCnt - 1))
-  //      m_gaussStats2(0 .. (#gaussians-1), 0 .. (dimCnt - 1))
-  //
-  //  Output:
-  //      You should call the functions:
-  //
-  //      m_gmmSet.set_gaussian_mean(gaussIdx, dimIdx, newMean);
-  //      m_gmmSet.set_gaussian_var(gaussIdx, dimIdx, newVar);
-  //
-  //      for each dimension of each Gaussian with the reestimated
-  //      values of the means and variances.
+    for (int gaussIdx = 0; gaussIdx < gaussCnt; ++gaussIdx) {
+        for (int dimIdx = 0; dimIdx < dimCnt; ++dimIdx) {
+            double newMean = m_gaussStats1(gaussIdx, dimIdx) / m_gaussCounts[gaussIdx];
+            double newVar = m_gaussStats2(gaussIdx, dimIdx) / m_gaussCounts[gaussIdx] - newMean * newMean;
+            m_gmmSet.set_gaussian_mean(gaussIdx, dimIdx, newMean);
+            m_gmmSet.set_gaussian_var(gaussIdx, dimIdx, newVar);
+        }
+    }
 
-  //  END_LAB
-  //
+
+    //  BEGIN_LAB
+    //
+    //  Input:
+    //      "gaussCnt" holds the total number of Gaussians.
+    //      "dimCnt" holds the dimension of the Gaussians.
+    //
+    //      The counts you have collected above are stored in:
+    //
+    //      m_gaussCounts[0 .. (#gaussians-1)]
+    //      m_gaussStats1(0 .. (#gaussians-1), 0 .. (dimCnt - 1))
+    //      m_gaussStats2(0 .. (#gaussians-1), 0 .. (dimCnt - 1))
+    //
+    //  Output:
+    //      You should call the functions:
+    //
+    //      m_gmmSet.set_gaussian_mean(gaussIdx, dimIdx, newMean);
+    //      m_gmmSet.set_gaussian_var(gaussIdx, dimIdx, newVar);
+    //
+    //      for each dimension of each Gaussian with the reestimated
+    //      values of the means and variances.
+
+    //  END_LAB
+    //
 }
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *

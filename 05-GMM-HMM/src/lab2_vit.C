@@ -37,89 +37,115 @@
 double viterbi(const Graph& graph, const matrix<double>& gmmProbs,
                matrix<VitCell>& chart, vector<int>& outLabelList,
                double acousWgt, bool doAlign) {
-  int frmCnt = chart.size1() - 1;
-  int stateCnt = chart.size2();
 
-  //  BEGIN_LAB
-  //
-  //  Input:
-  //      An HMM stored in the object "graph" of type "Graph".
-  //      A matrix of doubles "gmmProbs"
-  //
-  //      gmmProbs(0 .. (frmCnt - 1), 0 .. (#GMM's - 1))
-  //
-  //      that stores the log prob of each GMM in "gmmSet"
-  //      for each frame.
-  //
-  //  Output:
-  //      A matrix "chart" of "VitCell" objects (declaration of
-  //      "VitCell" class above):
-  //
-  //      chart(0 .. frmCnt, 0 .. stateCnt - 1)
-  //
-  //      On exit, chart(frmIdx, stateIdx).get_log_prob()
-  //      should be set to the logarithm of the probability
-  //      of the best path from the start state to
-  //      state "stateIdx" given the
-  //      first "frmIdx" frames of observations;
-  //      and chart(frmIdx, stateIdx).get_arc_id() should be set
-  //      to the arc ID for the last arc of this best path (or -1
-  //      if the best path is of length 0).
-  //      If a cell is unreachable from the start state,
-  //      these values should be set to "g_zeroLogProb"
-  //      and -1, respectively, which are what these values
-  //      are initialized to on entry.
-  //      The matrix "chart" has already been initialized to be
-  //      of the correct size.
-  //
-  //      Notes: "g_zeroLogProb" is a large negative number we use
-  //      to represent "ln 0" instead of the actual
-  //      value negative infinity.
-  //      You can assume there are no skip arcs, i.e.,
-  //      arc.get_gmm() >= 0 for all arcs "arc" in the graph.
-  //      Log probabilities should be base e, i.e., natural
-  //      logarithms.
-  //
-  //      Here is an example of the syntax for accessing a chart
-  //      cell log prob:
-  //
-  //      logProb = chart(frmIdx, stateIdx).get_log_prob();
-  //
-  //      Here is an example of setting the contents of a chart cell:
-  //
-  //      chart(frmIdx, stateIdx).assign(logProb, arcId);
-  //
-  //  Fill in Viterbi algorithm here.
-  //
-  //  The code for calculating the final probability and
-  //  the best path is provided for you below.
-  // assert(graph.get_state_count() == stateCnt);
+    //// initial
+    int start_state_id =  graph.get_start_state();       //  Get start state
+    int arcCnt = graph.get_arc_count(start_state_id);    //  Get number of outgoing arcs.
+    int arcId = graph.get_first_arc_id(start_state_id);  //  Get arc ID of first outgoing arc.
 
-  // DEBUG chart BEGIN
-  // int frmMax = frmCnt + 1;
-  // for (int frmIdx = 0; frmIdx < frmMax; ++frmIdx) {
-  //   // log prob
-  //   for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
-  //     cout << format(" %d") % chart(frmIdx, stateIdx).get_log_prob();
-  //   }
-  //   cout << endl;
-  // }
-  // // arc id
-  // for (int frmIdx = 0; frmIdx < frmMax; ++frmIdx) {
-  //   for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
-  //     cout << format(" %d") % chart(frmIdx, stateIdx).get_arc_id();
-  //   }
-  //   cout << endl;
-  // }
-  // DEBUG chart END
-  // return 0.0;
+    for (int arcIdx = 0; arcIdx < arcCnt; ++arcIdx) {
+        Arc arc;
+        //  Place arc with ID "arcId" in "arc"; set "arcId"
+        //  to arc ID of the next outgoing arc.
+        arcId = graph.get_arc(arcId, arc);           // next ard of the same state
+        int dstState = arc.get_dst_state();              // destiny state.
+        double transition_prob = arc.get_log_prob();     //  转移概率
+        double viterbi_log_pro = transition_prob + gmmProbs(0, arc.get_gmm());
+//        cout << format("start state: %d  ") % start_state_id;
+//        cout << format("arc id: %d  ") % (arcId - 1);
+//        cout << format("destiny state: %d  ") % dstState;
+//        cout << format("log prob: %d \n") % viterbi_log_pro;
+        chart(1, dstState).assign(viterbi_log_pro, arcId-1);
+    }
 
-  //  END_LAB
-  //
+    //// recursion
+    int frmCnt = chart.size1() - 1;  // 68
+    int stateCnt = chart.size2();    // 123
+    for (int frmIdx = 2; frmIdx <= frmCnt; ++frmIdx) {
+        for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
+            int arcCnt = graph.get_arc_count(stateIdx);          // Get number of outgoing arcs.
+            int arcId = graph.get_first_arc_id(stateIdx);  // Get arc ID of first outgoing arc.
+            for (int arcIdx = 0; arcIdx < arcCnt; ++arcIdx) {
+                Arc arc;
+                arcId = graph.get_arc(arcId, arc);           // next ard of the same state
+                int dstState = arc.get_dst_state();              // destiny state.
+                double delta_log_prob = chart(frmIdx - 1, stateIdx).get_log_prob();
+                double transition_prob = arc.get_log_prob();     //  转移概率
+                double viterbi_log_pro = delta_log_prob + transition_prob + gmmProbs(frmIdx - 1, arc.get_gmm());
+                if (viterbi_log_pro > chart(frmIdx, dstState).get_log_prob()){
+                    chart(frmIdx, dstState).assign(viterbi_log_pro, arcId - 1);
+                }
+            }
+        }
+    }
 
-  //  The code for calculating the final probability and
-  //  the best path is provided for you.
-  return viterbi_backtrace(graph, chart, outLabelList, doAlign);
+
+//    Input:
+//        An HMM stored in the object "graph" of type "Graph".
+//        A matrix of doubles "gmmProbs"
+//
+//        gmmProbs(0 .. (frmCnt - 1), 0 .. (#GMM's - 1))  size: 68*102
+//
+//        that stores the log prob of each GMM in "gmmSet"
+//        for each frame.
+//
+//    Output:
+//        A matrix "chart" of "VitCell" objects (declaration of
+//        "VitCell" class above):
+//
+//        chart(0 .. frmCnt, 0 .. stateCnt - 1)      size: 69*123
+//
+//        On exit, chart(frmIdx, stateIdx).get_log_prob()
+//        should be set to the logarithm of the probability
+//        of the best path from the start state to
+//        state "stateIdx" given the
+//        first "frmIdx" frames of observations;
+//        and chart(frmIdx, stateIdx).get_arc_id() should be set
+//        to the arc ID for the last arc of this best path (or -1
+//        if the best path is of length 0).
+//        If a cell is unreachable from the start state,
+//        these values should be set to "g_zeroLogProb"
+//        and -1, respectively, which are what these values
+//        are initialized to on entry.
+//        The matrix "chart" has already been initialized to be
+//        of the correct size.
+//
+//        Notes: "g_zeroLogProb" is a large negative number we use
+//        to represent "ln 0" instead of the actual
+//        value negative infinity.
+//        You can assume there are no skip arcs, i.e.,
+//        arc.get_gmm() >= 0 for all arcs "arc" in the graph.
+//        Log probabilities should be base e, i.e., natural
+//        logarithms.
+//
+//        Here is an example of the syntax for accessing a chart
+//        cell log prob:
+//
+//        logProb = chart(frmIdx, stateIdx).get_log_prob();
+//
+//        Here is an example of setting the contents of a chart cell:
+//
+//        chart(frmIdx, stateIdx).assign(logProb, arcId);
+
+
+//    int frmMax = frmCnt + 1;
+//    for (int frmIdx = 0; frmIdx < frmMax; ++frmIdx) {
+//     // log prob
+//     for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
+//       cout << format(" %d") % chart(frmIdx, stateIdx).get_log_prob();
+//     }
+//     cout << endl;
+//    }
+//
+//    for (int frmIdx = 0; frmIdx < frmMax; ++frmIdx) {
+//     for (int stateIdx = 0; stateIdx < stateCnt; ++stateIdx) {
+//       cout << format(" %d") % chart(frmIdx, stateIdx).get_arc_id();
+//     }
+//     cout << endl;
+//    }
+
+//    return 0;
+    return viterbi_backtrace(graph, chart, outLabelList, doAlign);
 }
 
 /** * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * **
