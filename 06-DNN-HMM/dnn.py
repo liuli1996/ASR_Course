@@ -18,7 +18,8 @@ class Layer:
         Returns:
             output when applied this layer
         '''
-        raise 'Not implement error'
+        raise('Not implement error')
+
 
     def backward(self, input, output, d_output):
         ''' Compute gradient of this layer's input by (input, output, d_output)
@@ -31,7 +32,7 @@ class Layer:
         Returns:
             accumulated gradient from final output to this layer's input
         '''
-        raise 'Not implement error'
+        raise ('Not implement error')
 
     def set_learning_rate(self, lr):
         ''' Set learning rate of this layer'''
@@ -44,33 +45,46 @@ class Layer:
 
 class ReLU(Layer):
     def forward(self, input):
+        output = (np.abs(input) + input) / 2
+        return output
         # BEGIN_LAB
         # END_LAB
 
     def backward(self, input, output, d_output):
+        grad = output.copy()
+        grad[grad > 0] = 1
+        grad = grad * d_output
+        return grad
         # BEGIN_LAB
         # END_LAB
 
 
 class FullyConnect(Layer):
     def __init__(self, in_dim, out_dim):
-        self.w = np.random.randn(out_dim, in_dim) * np.sqrt(2.0 / in_dim)
+        self.w = np.random.randn(out_dim, in_dim) * np.sqrt(2.0 / in_dim)  # 为什么需要加上一个系数
         self.b = np.zeros(out_dim)
         self.dw = np.zeros((out_dim, in_dim))
         self.db = np.zeros(out_dim)
 
     def forward(self, input):
+        output = np.matmul(input, self.w.T) + self.b
+        return output
         # BEGIN_LAB
         # END_LAB
 
     def backward(self, input, output, d_output):
         batch_size = input.shape[0]
-        in_diff = None
+
+        self.dw += np.matmul(d_output.T, input)
+        self.db = np.sum(d_output, axis=0)
+        in_diff = np.matmul(d_output, self.w)
+
         # BEGIN_LAB, compute in_diff/dw/db here
         # END_LAB
         # Normalize dw/db by batch size
         self.dw = self.dw / batch_size
         self.db = self.db / batch_size
+
         return in_diff
 
     def update(self):
@@ -81,7 +95,7 @@ class FullyConnect(Layer):
 class Softmax(Layer):
     def forward(self, input):
         row_max = input.max(axis=1).reshape(input.shape[0], 1)
-        x = input - row_max
+        x = input - row_max  # 为什么需要减去row_max
         return np.exp(x) / np.sum(np.exp(x), axis=1).reshape(x.shape[0], 1)
 
     def backward(self, input, output, d_output):
