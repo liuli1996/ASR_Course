@@ -90,13 +90,51 @@ void LangModel::count_sentence_ngrams(const vector<int>& wordList) {
   //      the value of the incremented count.
   //
   //      Your code should work for any value of m_n (larger than zero).
-
+  int wordCnt = wordList.size();
+  for (int n = 1; n <= m_n; ++n) {
+      for (int i = m_n - 1; i < wordCnt; ++i) {
+          vector<int> ngram(wordList.begin() + i - (m_n - n), wordList.begin() + i + 1);
+          vector<int> hist_ngram(ngram.begin(), ngram.end() - 1);
+          int count = m_predCounts.incr_count(ngram);
+          m_histCounts.incr_count(hist_ngram);
+          if (count == 1) {
+              m_histOnePlusCounts.incr_count(hist_ngram);
+          }
+      }
+  }
 }
 
 double LangModel::get_prob_witten_bell(const vector<int>& ngram) const {
-  double retProb = 1.0;
-  //  Don't count epsilon.
-  int vocSize = m_symTable->size() - 1;
+    double retProb = 1.0;
+    //  Don't count epsilon.
+    int vocSize = m_symTable->size() - 1;
+    double lambda = 0.0, P_mle = 0.0, beta = 1.0, P_bkf;
+
+    vector<int> hist_gram(ngram.begin(), ngram.end() - 1);
+    int pred_count = m_predCounts.get_count(ngram);
+    int hist_count = m_histCounts.get_count(hist_gram);
+    int hist_oneplus_count = m_histOnePlusCounts.get_count(hist_gram);
+
+    if (hist_count > 0) {
+        lambda = 1.0 * hist_count / (hist_oneplus_count + hist_count);
+//        cout << "lambda: " << lambda << endl;
+        beta = 1.0 * hist_oneplus_count / (hist_oneplus_count + hist_count);
+//        cout << "beta: " << beta << endl;
+        P_mle = 1.0 * pred_count / hist_count;
+//        cout << "P_mle: " << P_mle << endl;
+    }
+
+    if (ngram.size() == 1) {
+        P_bkf = 1.0 / vocSize;
+    } else {
+        P_bkf = get_prob_witten_bell(vector<int>(ngram.begin() + 1, ngram.end()));
+    }
+//    cout << "P_bkf: " << P_bkf << endl;
+
+    retProb = lambda * P_mle + beta * P_bkf;
+
+    return retProb;
+
 
   //
   //  BEGIN_LAB
@@ -124,7 +162,6 @@ double LangModel::get_prob_witten_bell(const vector<int>& ngram) const {
   //      "retProb" should be set to the smoothed n-gram probability
   //          of the last word in the n-gram given the previous words.
   //
-  return retProb;
 }
 
 double LangModel::get_prob(const vector<int>& ngram) const {
